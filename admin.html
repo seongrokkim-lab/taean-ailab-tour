@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>투어 예약 관리 - 태안 AI-DREAM Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F5F8F8; --surface: #FFFFFF; --ink: #1D2F3A; --ink-soft: #566873; --line: #D5DFE0;
+    --mint: #1F8A7C; --mint-deep: #166A5F; --mint-wash: #DFF1ED; --maple: #D8B887;
+    --alert: #A8432B; --alert-wash: #F8E7E2; --amber: #8A6414; --amber-wash: #FBF1D9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; font-size: 15px; line-height: 1.6; word-break: keep-all; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 20px 72px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; padding: 28px 0 18px; border-bottom: 3px solid var(--maple); }
+  header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+  header .who { color: var(--ink-soft); font-size: 14px; }
+  h2 { font-size: 18px; font-weight: 600; margin: 32px 0 10px; }
+  .hint { color: var(--ink-soft); font-size: 14px; margin: 0 0 12px; }
+  input[type=text], input[type=password], input[type=date], select, textarea { font: inherit; color: inherit; background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+  input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 3px solid var(--maple); outline-offset: 1px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; }
+  button:disabled { opacity: .5; cursor: progress; }
+  .primary { background: var(--mint); border-color: var(--mint); color: #fff; font-weight: 600; }
+  .primary:hover { background: var(--mint-deep); }
+  .danger { color: var(--alert); border-color: var(--alert); }
+  .small { padding: 5px 10px; font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .msg { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+  .msg.error { background: var(--alert-wash); color: var(--alert); }
+  .msg.ok { background: var(--mint-wash); color: var(--mint-deep); }
+  [hidden] { display: none !important; }
+
+  /* 로그인 */
+  .login { max-width: 380px; margin: 60px auto; padding: 28px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; }
+  .login h1 { margin: 0 0 4px; font-size: 20px; }
+  .login .field { display: grid; gap: 4px; margin-top: 14px; }
+  .login label { font-size: 13px; font-weight: 500; }
+  .login .primary { width: 100%; margin-top: 20px; padding: 12px; }
+
+  /* 회차 카드 */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 14px 16px; cursor: pointer; }
+  .card.selected { border-color: var(--mint); box-shadow: inset 0 0 0 1px var(--mint); background: #F3FAF8; }
+  .card.past { opacity: .6; }
+  .card .date { font-size: 18px; font-weight: 600; }
+  .card .time { color: var(--ink-soft); font-size: 14px; }
+  .card dl { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 14px; }
+  .card dt { color: var(--ink-soft); }
+  .card dd { margin: 0; font-weight: 500; }
+  .card .foot { margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; background: #E6ECEE; color: var(--ink-soft); }
+  .badge.open { background: var(--mint-wash); color: var(--mint-deep); }
+  .badge.wait { background: var(--amber-wash); color: var(--amber); }
+  .badge.ok { background: var(--mint-wash); color: var(--mint-deep); }
+  .badge.no { background: var(--alert-wash); color: var(--alert); }
+
+  /* 예약 표 */
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 14px; }
+  th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: #EEF4F3; font-weight: 600; font-size: 13px; }
+  tr:last-child td { border-bottom: 0; }
+  td .sub { color: var(--ink-soft); font-size: 13px; }
+  td.act { white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+  .filters label { font-size: 14px; }
+  .empty { padding: 22px; color: var(--ink-soft); background: var(--surface); border: 1.5px dashed var(--line); border-radius: 10px; }
+
+  dialog { border: 1.5px solid var(--line); border-radius: 12px; padding: 22px; max-width: 460px; width: calc(100% - 40px); }
+  dialog::backdrop { background: rgba(29,47,58,.35); }
+  dialog h3 { margin: 0 0 8px; font-size: 17px; }
+  dialog textarea { width: 100%; min-height: 90px; margin-top: 8px; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 로그인 -->
+  <section id="loginPanel" class="login">
+    <h1>투어 예약 관리</h1>
+    <p class="hint">태안초등학교 AI-DREAM Lab 담당자 전용</p>
+    <form id="loginForm" novalidate>
+      <div class="field"><label for="lid">아이디</label><input type="text" id="lid" autocomplete="username"></div>
+      <div class="field"><label for="lpw">비밀번호</label><input type="password" id="lpw" autocomplete="current-password"></div>
+      <button type="submit" class="primary" id="loginBtn">로그인</button>
+      <div id="loginMsg" class="msg error" role="alert" hidden></div>
+    </form>
+  </section>
+
+  <!-- 관리 화면 -->
+  <div id="app" hidden>
+    <header>
+      <h1>투어 예약 관리</h1>
+      <div class="row">
+        <span class="who" id="who"></span>
+        <button type="button" class="small" id="refreshBtn">새로 고침</button>
+        <button type="button" class="small" id="statsBtn">통계 갱신</button>
+        <button type="button" class="small" id="logoutBtn">로그아웃</button>
+      </div>
+    </header>
+    <div id="appMsg" class="msg" role="status" hidden></div>
+
+    <h2>회차</h2>
+    <p class="hint">카드를 누르면 아래에 해당 회차의 신청이 표시됩니다. 상태를 공개로 바꿔야 예약 페이지에 노출됩니다.</p>
+    <div class="row" style="margin-bottom:12px">
+      <input type="date" id="newDate">
+      <button type="button" id="addDayBtn">오픈 랩 데이 추가</button>
+      <span class="sub hint" style="margin:0">기본 2회차, 비공개 상태로 추가됩니다. 시간·정원은 시트 OpenDays에서 수정합니다.</span>
+    </div>
+    <div id="cards" class="cards"></div>
+
+    <h2>신청 목록</h2>
+    <div class="filters">
+      <label><input type="checkbox" id="fPending"> 승인 대기만</label>
+      <label><input type="checkbox" id="fAll"> 모든 회차</label>
+      <span id="listInfo" class="hint" style="margin:0"></span>
+    </div>
+    <div class="tablewrap" id="tableWrap"></div>
+  </div>
+
+  <footer>승인·반려·취소를 누르면 신청자에게 안내 메일이 자동 발송됩니다. 반려는 사유를 입력해야 합니다.</footer>
+</div>
+
+<dialog id="dlg">
+  <h3 id="dlgTitle"></h3>
+  <div id="dlgBody" class="hint"></div>
+  <textarea id="dlgNote" placeholder="메일에 포함할 안내 문구"></textarea>
+  <div class="row" style="justify-content:flex-end; margin-top:14px">
+    <button type="button" id="dlgCancel">닫기</button>
+    <button type="button" class="primary" id="dlgOk">확인</button>
+  </div>
+</dialog>
+
+<script>
+  /* ── 서버 주소: index.html 과 같은 Apps Script 웹앱 URL ── */
+  var API_URL = 'https://script.google.com/macros/s/AKfycbwsOEv48HeG84l7BEI_sGoHgoNz1zbrl8msod7Fzqux1-XkOg0Hk-ktqGjCb4QTEYDN/exec';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { token: null, id: '', data: null, selected: null };
+
+  function api(action, payload) {
+    var body = Object.assign({ action: 'admin.' + action, token: state.token }, payload || {});
+    return fetch(API_URL, { method: 'POST', redirect: 'follow', cache: 'no-store',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (res) { if (res && res.auth === false) { logoutLocal(); throw new Error('세션이 만료되었습니다. 다시 로그인하세요.'); } return res; });
+  }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function showMsg(node, text, kind) { node.textContent = text; node.className = 'msg ' + (kind || 'error'); node.hidden = false; }
+  function esc(s) { return String(s == null ? '' : s); }
+
+  /* ── 로그인 ── */
+  try { state.token = sessionStorage.getItem('atok'); state.id = sessionStorage.getItem('aid') || ''; } catch (e) {}
+  if (state.token) enter();
+
+  $('loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var id = $('lid').value.trim(), pw = $('lpw').value;
+    if (!id || !pw) return showMsg($('loginMsg'), '아이디와 비밀번호를 입력하세요.');
+    $('loginBtn').disabled = true; $('loginMsg').hidden = true;
+    state.token = null;
+    api('login', { id: id, pw: pw }).then(function (res) {
+      $('loginBtn').disabled = false;
+      if (!res.ok) return showMsg($('loginMsg'), res.message || '로그인하지 못했습니다.');
+      state.token = res.token; state.id = res.id;
+      try { sessionStorage.setItem('atok', res.token); sessionStorage.setItem('aid', res.id); } catch (e) {}
+      $('lpw').value = '';
+      enter();
+    }).catch(function (err) { $('loginBtn').disabled = false; showMsg($('loginMsg'), err.message || '연결이 원활하지 않습니다.'); });
+  });
+
+  function logoutLocal() {
+    state.token = null; state.data = null;
+    try { sessionStorage.removeItem('atok'); sessionStorage.removeItem('aid'); } catch (e) {}
+    $('app').hidden = true; $('loginPanel').hidden = false;
+  }
+  $('logoutBtn').addEventListener('click', function () { api('logout').catch(function () {}).then(logoutLocal); });
+
+  function enter() {
+    $('loginPanel').hidden = true; $('app').hidden = false;
+    $('who').textContent = state.id ? state.id + ' 님' : '';
+    load();
+  }
+
+  /* ── 데이터 ── */
+  function load() {
+    $('appMsg').hidden = true;
+    return api('overview').then(function (res) {
+      if (!res.ok) return showMsg($('appMsg'), res.message || '불러오지 못했습니다.');
+      state.data = res;
+      if (!state.selected || !res.sessions.some(function (s) { return s.id === state.selected; })) {
+        var upcoming = res.sessions.filter(function (s) { return s.date >= res.today; });
+        state.selected = upcoming.length ? upcoming[upcoming.length - 1].id : (res.sessions[0] ? res.sessions[0].id : null);
+      }
+      renderCards(); renderTable();
+    }).catch(function (err) { showMsg($('appMsg'), err.message || '연결이 원활하지 않습니다.'); });
+  }
+  $('refreshBtn').addEventListener('click', load);
+  $('fPending').addEventListener('change', renderTable);
+  $('fAll').addEventListener('change', renderTable);
+
+  function renderCards() {
+    var box = $('cards'); box.textContent = '';
+    var d = state.data;
+    if (!d.sessions.length) { box.appendChild(el('div', 'empty', '등록된 회차가 없습니다. 위에서 오픈 랩 데이를 추가하세요.')); return; }
+    d.sessions.forEach(function (s) {
+      var c = el('div', 'card' + (s.id === state.selected ? ' selected' : '') + (s.date < d.today ? ' past' : ''));
+      c.appendChild(el('div', 'date', s.date + ' (' + s.weekday + ')'));
+      c.appendChild(el('div', 'time', s.start + ' ~ ' + s.end + ' · ' + s.id));
+      var dl = el('dl');
+      [['정원', s.capacity + '명'], ['승인 대기', s.pending + '명'], ['승인', s.approved + '명 / ' + s.approvedOrgs + '개 기관'], ['잔여', s.remaining + '명'], ['신청 마감', s.deadline]]
+        .forEach(function (p) { dl.appendChild(el('dt', null, p[0])); dl.appendChild(el('dd', null, p[1])); });
+      c.appendChild(dl);
+      var foot = el('div', 'foot');
+      foot.appendChild(el('span', 'badge' + (s.status === '공개' ? ' open' : ''), s.status));
+      var sel = el('select'); sel.className = 'small';
+      d.dayStatuses.forEach(function (st) { var o = el('option', null, st); o.value = st; if (st === s.status) o.selected = true; sel.appendChild(o); });
+      sel.addEventListener('click', function (e) { e.stopPropagation(); });
+      sel.addEventListener('change', function (e) {
+        e.stopPropagation();
+        api('setDayStatus', { id: s.id, status: sel.value }).then(function (res) {
+          if (!res.ok) showMsg($('appMsg'), res.message); else showMsg($('appMsg'), s.id + ' 상태를 ' + sel.value + '(으)로 바꿨습니다.', 'ok');
+          load();
+        }).catch(function (err) { showMsg($('appMsg'), err.message); });
+      });
+      foot.appendChild(sel);
+      c.appendChild(foot);
+      c.addEventListener('click', function () { state.selected = s.id; renderCards(); renderTable(); });
+      box.appendChild(c);
+    });
+  }
+
+  function sessionOf(id) { return state.data.sessions.filter(function (s) { return s.id === id; })[0]; }
+  function label(id) { var s = sessionOf(id); return s ? s.date + '(' + s.weekday + ') ' + s.start + '~' + s.end : id; }
+
+  function renderTable() {
+    var wrap = $('tableWrap'); wrap.textContent = '';
+    var d = state.data;
+    var all = $('fAll').checked, pendingOnly = $('fPending').checked;
+    var rows = d.reservations.filter(function (r) {
+      if (!all && r.session !== state.selected) return false;
+      if (pendingOnly && r.status !== '신청') return false;
+      return true;
+    }).sort(function (a, b) { return (b.applied || '').localeCompare(a.applied || ''); });
+    $('listInfo').textContent = (all ? '모든 회차' : (state.selected ? label(state.selected) : '회차 미선택')) + ' · ' + rows.length + '건';
+    if (!rows.length) { wrap.appendChild(el('div', 'empty', '표시할 신청이 없습니다.')); return; }
+
+    var t = el('table'), thead = el('thead'), tr = el('tr');
+    ['예약번호 / 신청 일시', '회차', '기관 / 대표자', '연락처', '인원', '방문 목적', '공문', '상태 / 처리', '처리'].forEach(function (h) { tr.appendChild(el('th', null, h)); });
+    thead.appendChild(tr); t.appendChild(thead);
+    var tb = el('tbody');
+    rows.forEach(function (r) {
+      var tr = el('tr');
+      var c1 = el('td'); c1.appendChild(el('div', null, r.no)); c1.appendChild(el('div', 'sub', r.applied)); tr.appendChild(c1);
+      tr.appendChild(el('td', null, label(r.session)));
+      var c3 = el('td'); c3.appendChild(el('div', null, r.org + ' (' + r.orgType + ')')); c3.appendChild(el('div', 'sub', r.title + ' ' + r.name)); tr.appendChild(c3);
+      var c4 = el('td'); c4.appendChild(el('div', null, r.phone)); c4.appendChild(el('div', 'sub', r.email)); tr.appendChild(c4);
+      tr.appendChild(el('td', null, r.count + '명'));
+      var c6 = el('td'); c6.appendChild(el('div', 'sub', r.purpose)); if (r.note) c6.appendChild(el('div', 'sub', '안내: ' + r.note)); tr.appendChild(c6);
+      var c7 = el('td'); var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!r.doc; cb.title = r.doc || '공문 접수 표시';
+      cb.addEventListener('change', function () {
+        cb.disabled = true;
+        api('setDoc', { no: r.no, received: cb.checked }).then(load).catch(function (err) { showMsg($('appMsg'), err.message); load(); });
+      });
+      c7.appendChild(cb); if (r.doc) c7.appendChild(el('div', 'sub', r.doc)); tr.appendChild(c7);
+      var c8 = el('td');
+      var cls = r.status === '신청' ? 'wait' : r.status === '승인' ? 'ok' : r.status === '반려' ? 'no' : '';
+      c8.appendChild(el('span', 'badge ' + cls, r.status === '신청' ? '승인 대기' : r.status));
+      if (r.mailed) c8.appendChild(el('div', 'sub', r.mailed));
+      tr.appendChild(c8);
+      var c9 = el('td', 'act');
+      if (r.status === '신청') {
+        c9.appendChild(actBtn('승인', 'small primary', function () { confirmAct(r, '승인'); }));
+        c9.appendChild(document.createTextNode(' '));
+        c9.appendChild(actBtn('반려', 'small danger', function () { confirmAct(r, '반려'); }));
+      } else if (r.status === '승인') {
+        c9.appendChild(actBtn('취소', 'small danger', function () { confirmAct(r, '취소'); }));
+        c9.appendChild(document.createTextNode(' '));
+        c9.appendChild(actBtn('대기로', 'small', function () { confirmAct(r, '신청'); }));
+      } else {
+        c9.appendChild(actBtn('대기로', 'small', function () { confirmAct(r, '신청'); }));
+      }
+      tr.appendChild(c9);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); wrap.appendChild(t);
+  }
+  function actBtn(text, cls, fn) { var b = el('button', cls, text); b.type = 'button'; b.addEventListener('click', fn); return b; }
+
+  /* ── 승인·반려·취소 확인창 ── */
+  var dlg = $('dlg'), pendingAct = null;
+  function confirmAct(r, status) {
+    pendingAct = { r: r, status: status };
+    var titles = { '승인': '승인하고 안내 메일을 보냅니다', '반려': '반려하고 안내 메일을 보냅니다', '취소': '취소하고 안내 메일을 보냅니다', '신청': '승인 대기 상태로 되돌립니다' };
+    $('dlgTitle').textContent = titles[status];
+    $('dlgBody').textContent = r.no + ' · ' + r.org + ' ' + r.name + ' · ' + r.count + '명 · ' + label(r.session);
+    $('dlgNote').value = r.note || '';
+    $('dlgNote').hidden = status === '신청';
+    $('dlgNote').placeholder = status === '반려' ? '반려 사유 (필수, 메일에 포함)' : status === '취소' ? '취소 안내 (선택, 메일에 포함)' : '추가 안내 (선택, 메일에 포함)';
+    dlg.showModal();
+  }
+  $('dlgCancel').addEventListener('click', function () { dlg.close(); });
+  $('dlgOk').addEventListener('click', function () {
+    if (!pendingAct) return;
+    var note = $('dlgNote').value.trim();
+    if (pendingAct.status === '반려' && !note) { $('dlgNote').focus(); return; }
+    $('dlgOk').disabled = true;
+    api('setStatus', { no: pendingAct.r.no, status: pendingAct.status, note: note }).then(function (res) {
+      $('dlgOk').disabled = false; dlg.close();
+      showMsg($('appMsg'), res.message || '처리했습니다.', res.ok ? 'ok' : 'error');
+      load();
+    }).catch(function (err) { $('dlgOk').disabled = false; dlg.close(); showMsg($('appMsg'), err.message); load(); });
+  });
+
+  /* ── 회차 추가, 통계 ── */
+  $('addDayBtn').addEventListener('click', function () {
+    var date = $('newDate').value;
+    if (!date) return showMsg($('appMsg'), '날짜를 선택하세요.');
+    $('addDayBtn').disabled = true;
+    api('addDay', { date: date }).then(function (res) {
+      $('addDayBtn').disabled = false; showMsg($('appMsg'), res.message, res.ok ? 'ok' : 'error'); if (res.ok) { $('newDate').value = ''; state.selected = null; load(); }
+    }).catch(function (err) { $('addDayBtn').disabled = false; showMsg($('appMsg'), err.message); });
+  });
+  $('statsBtn').addEventListener('click', function () {
+    $('statsBtn').disabled = true;
+    api('updateStats').then(function (res) { $('statsBtn').disabled = false; showMsg($('appMsg'), res.message, res.ok ? 'ok' : 'error'); })
+      .catch(function (err) { $('statsBtn').disabled = false; showMsg($('appMsg'), err.message); });
+  });
+</script>
+</body>
+</html>
