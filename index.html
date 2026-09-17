@@ -225,7 +225,7 @@
         <dt>인원</dt><dd id="doneCount"></dd>
         <dt>장소</dt><dd id="donePlace"></dd>
       </dl>
-      <p class="hint" style="margin-top:14px">예약 조회와 취소에는 예약번호와 연락처 뒤 4자리가 필요합니다.</p>
+      <p class="hint" style="margin-top:14px">예약 조회와 취소에는 예약번호와 신청할 때 입력한 연락처가 필요합니다.</p>
       <div class="row"><button type="button" class="ghost" id="againBtn">다른 회차 신청하기</button></div>
     </div>
   </section>
@@ -234,15 +234,15 @@
   <section id="panel-lookup" role="tabpanel" aria-labelledby="tab-lookup" hidden>
     <form id="lookupForm" novalidate>
       <h2>예약을 조회합니다</h2>
-      <p class="hint">접수 메일에 적힌 예약번호와 신청할 때 입력한 연락처 뒤 4자리를 입력하세요.</p>
+      <p class="hint">접수 메일에 적힌 예약번호와 신청할 때 입력한 연락처를 입력하세요.</p>
       <div class="grid">
         <div class="field">
           <label for="lkNo">예약번호</label>
-          <input type="text" id="lkNo" maxlength="14" autocapitalize="characters" placeholder="예: TA1021-AB2CD">
+          <input type="text" id="lkNo" maxlength="10" inputmode="numeric" placeholder="예: 2026-001">
         </div>
         <div class="field">
-          <label for="lkLast4">연락처 뒤 4자리</label>
-          <input type="tel" id="lkLast4" maxlength="4" inputmode="numeric">
+          <label for="lkPhone">연락처</label>
+          <input type="tel" id="lkPhone" maxlength="13" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000">
         </div>
       </div>
       <button type="submit" class="primary" id="lookupBtn">예약 조회하기</button>
@@ -457,10 +457,11 @@
   }
   function runLookup() {
     var msg = $('lookupMsg'), btn = $('lookupBtn');
-    var no = $('lkNo').value.trim(), last4 = $('lkLast4').value.trim();
-    if (!no || !/^\d{4}$/.test(last4)) return showMsg(msg, '예약번호와 연락처 뒤 4자리를 입력하세요.');
+    var no = $('lkNo').value.trim(), phone = $('lkPhone').value.trim();
+    if (!/^\d{4}-\d{3,}$/.test(no)) return showMsg(msg, '예약번호는 2026-001 형식입니다.');
+    if (phone.replace(/\D/g, '').length < 9) return showMsg(msg, '신청할 때 입력한 연락처를 입력하세요.');
     btn.disabled = true; msg.hidden = true; $('lookupResult').hidden = true;
-    api('lookup', { no: no, last4: last4 }).then(function (res) {
+    api('lookup', { no: no, phone: phone }).then(function (res) {
       btn.disabled = false;
       if (!res || !res.ok) return showMsg(msg, (res && res.message) || '조회하지 못했습니다.');
       showLookup(res);
@@ -477,7 +478,7 @@
   $('cancelConfirmBtn').addEventListener('click', function () {
     var btn = $('cancelConfirmBtn');
     btn.disabled = true;
-    api('cancel', { no: $('lkNo').value.trim(), last4: $('lkLast4').value.trim() }).then(function (res) {
+    api('cancel', { no: $('lkNo').value.trim(), phone: $('lkPhone').value.trim() }).then(function (res) {
       btn.disabled = false;
       if (res && res.ok) {
         $('lrStatus').textContent = '취소';
