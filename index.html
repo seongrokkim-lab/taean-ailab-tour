@@ -167,8 +167,15 @@
             <select id="orgType"><option value="">선택하세요</option></select>
           </div>
           <div class="field">
-            <label for="title">직위</label>
-            <input type="text" id="title" maxlength="20" placeholder="예: 교사, 교감, 장학사">
+            <label for="titleSel">직위</label>
+            <select id="titleSel">
+              <option value="">선택하세요</option>
+              <option>교사</option><option>수석교사</option><option>교감</option><option>교장</option>
+              <option>장학사</option><option>장학관</option><option>연구사</option><option>연구관</option>
+              <option>교수</option><option>연구원</option>
+              <option value="직접 입력">직접 입력</option>
+            </select>
+            <input type="text" id="titleCustom" maxlength="20" placeholder="직위를 입력하세요" hidden>
           </div>
           <div class="field">
             <label for="name">대표자 성명</label>
@@ -176,7 +183,8 @@
           </div>
           <div class="field">
             <label for="phone">연락처</label>
-            <input type="tel" id="phone" maxlength="13" autocomplete="tel" inputmode="tel" placeholder="010-0000-0000">
+            <input type="tel" id="phone" maxlength="13" autocomplete="tel" inputmode="numeric" placeholder="010-0000-0000">
+            <span class="sub">숫자만 입력하면 자동으로 000-0000-0000 형태가 됩니다.</span>
           </div>
           <div class="field">
             <label for="email">이메일</label>
@@ -188,8 +196,17 @@
             <span class="sub" id="countHint"></span>
           </div>
           <div class="field full">
-            <label for="purpose">방문 목적</label>
-            <textarea id="purpose" maxlength="300" placeholder="예: 미래형 공간 구축 계획 수립을 위한 사례 확인"></textarea>
+            <label for="purposeSel">방문 목적</label>
+            <select id="purposeSel">
+              <option value="">선택하세요</option>
+              <option>미래형 교육공간 구축 사례 확인</option>
+              <option>AI·디지털 수업 사례 참관</option>
+              <option>AI 중점학교·연구학교 운영 벤치마킹</option>
+              <option>기관 연수·워크숍 일환 방문</option>
+              <option>교육청·유관기관 현장 점검</option>
+              <option value="직접 입력">직접 입력</option>
+            </select>
+            <textarea id="purposeCustom" maxlength="300" placeholder="방문 목적을 입력하세요" hidden></textarea>
           </div>
           <div class="field full">
             <span class="sub">승인 안내 메일을 받으신 뒤, 방문일 전까지 방문 협조 공문(수신: 태안초등학교)을 보내 주세요. 공문 접수 후 방문이 확정됩니다.</span>
@@ -300,6 +317,36 @@
     node.hidden = false;
   }
 
+  /* 드롭다운 + 직접 입력 */
+  function bindCustom(selId, inputId) {
+    var sel = $(selId), inp = $(inputId);
+    sel.addEventListener('change', function () {
+      var custom = sel.value === '직접 입력';
+      inp.hidden = !custom;
+      if (custom) inp.focus(); else inp.value = '';
+    });
+  }
+  function pickValue(selId, inputId) {
+    var v = $(selId).value;
+    return v === '직접 입력' ? $(inputId).value.trim() : v;
+  }
+  function focusFor(selId, inputId) { return $(selId).value === '직접 입력' ? inputId : selId; }
+  bindCustom('titleSel', 'titleCustom');
+  bindCustom('purposeSel', 'purposeCustom');
+
+  /* 연락처 자동 하이픈 (000-0000-0000) */
+  function formatPhoneInput(inp) {
+    inp.addEventListener('input', function () {
+      var d = inp.value.replace(/\D/g, '').slice(0, 11);
+      var out = d;
+      if (d.length > 7) out = d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+      else if (d.length > 3) out = d.slice(0, 3) + '-' + d.slice(3);
+      inp.value = out;
+    });
+  }
+  formatPhoneInput($('phone'));
+  formatPhoneInput($('lkPhone'));
+
   /* 탭 */
   function selectTab(name) {
     ['apply', 'lookup'].forEach(function (t) {
@@ -399,17 +446,20 @@
     var s = state.selected;
     if (!s) return showMsg(msg, '방문할 회차를 선택하세요.');
     var f = {
-      sessionId: s.id, org: $('org').value, orgType: $('orgType').value, title: $('title').value,
+      sessionId: s.id, org: $('org').value, orgType: $('orgType').value, title: pickValue('titleSel', 'titleCustom'),
       name: $('name').value, phone: $('phone').value, email: $('email').value,
-      count: Number($('count').value), purpose: $('purpose').value,
+      count: Number($('count').value), purpose: pickValue('purposeSel', 'purposeCustom'),
       consent: $('consent').checked, website: $('website').value
     };
-    var required = [['org', '기관명을 입력하세요.'], ['orgType', '기관 유형을 선택하세요.'], ['title', '직위를 입력하세요.'],
-      ['name', '대표자 성명을 입력하세요.'], ['phone', '연락처를 입력하세요.'], ['email', '이메일을 입력하세요.'],
-      ['purpose', '방문 목적을 입력하세요.']];
+    var required = [['org', 'org', '기관명을 입력하세요.'], ['orgType', 'orgType', '기관 유형을 선택하세요.'],
+      ['title', focusFor('titleSel', 'titleCustom'), '직위를 선택하거나 입력하세요.'],
+      ['name', 'name', '대표자 성명을 입력하세요.'], ['phone', 'phone', '연락처를 입력하세요.'], ['email', 'email', '이메일을 입력하세요.'],
+      ['purpose', focusFor('purposeSel', 'purposeCustom'), '방문 목적을 선택하거나 입력하세요.']];
     for (var i = 0; i < required.length; i++) {
-      if (!String(f[required[i][0]]).trim()) { $(required[i][0]).focus(); return showMsg(msg, required[i][1]); }
+      if (!String(f[required[i][0]]).trim()) { $(required[i][1]).focus(); return showMsg(msg, required[i][2]); }
     }
+    if (!/^\d{3}-\d{4}-\d{4}$/.test(f.phone)) { $('phone').focus(); return showMsg(msg, '연락처는 010-0000-0000 형식으로 입력하세요.'); }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) { $('email').focus(); return showMsg(msg, '이메일 주소를 확인하세요. @와 도메인(예: school.kr)이 있어야 합니다.'); }
     if (!(f.count >= 1) || f.count > Number($('count').max)) { $('count').focus(); return showMsg(msg, '방문 인원은 1명부터 ' + $('count').max + '명까지 입력할 수 있습니다.'); }
     if (!f.consent) { $('consent').focus(); return showMsg(msg, '개인정보 수집·이용에 동의해야 신청할 수 있습니다.'); }
 
@@ -436,7 +486,7 @@
   $('againBtn').addEventListener('click', function () {
     $('donePanel').hidden = true;
     $('applyForm').hidden = false;
-    $('purpose').value = ''; $('consent').checked = false;
+    $('purposeSel').value = ''; $('purposeCustom').value = ''; $('purposeCustom').hidden = true; $('consent').checked = false;
     load();
   });
 
@@ -459,7 +509,7 @@
     var msg = $('lookupMsg'), btn = $('lookupBtn');
     var no = $('lkNo').value.trim(), phone = $('lkPhone').value.trim();
     if (!/^\d{4}-\d{3,}$/.test(no)) return showMsg(msg, '예약번호는 2026-001 형식입니다.');
-    if (phone.replace(/\D/g, '').length < 9) return showMsg(msg, '신청할 때 입력한 연락처를 입력하세요.');
+    if (!/^\d{3}-\d{4}-\d{4}$/.test(phone)) return showMsg(msg, '연락처는 010-0000-0000 형식으로 입력하세요.');
     btn.disabled = true; msg.hidden = true; $('lookupResult').hidden = true;
     api('lookup', { no: no, phone: phone }).then(function (res) {
       btn.disabled = false;
