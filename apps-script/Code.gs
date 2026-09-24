@@ -24,6 +24,8 @@ const DEFAULT_SESSIONS = [{ start: '15:00', end: '15:40' }, { start: '15:50', en
 const DEFAULT_CAPACITY = 15;
 const DEFAULT_ORG_CAP = 5;
 const DEADLINE_DAYS = 7;
+// 하루 전체 신청 건수 상한(신청 일시 기준). Config 시트에 하루 신청 상한 항목을 추가하면 그 값을 씁니다.
+const DAILY_SUBMIT_LIMIT = 40;
 
 const CONFIG_DEFAULTS = [
   ['관리자 메일', ''],
@@ -238,6 +240,9 @@ function submitReservation(f) {
   if (!purpose) return { ok: false, message: '방문 목적을 입력하세요.' };
   if (f.consent !== true) return { ok: false, message: '개인정보 수집·이용에 동의해야 신청할 수 있습니다.' };
 
+  const cfg = getConfig_();
+  const dailyLimit = parseInt(cfg['하루 신청 상한'], 10) || DAILY_SUBMIT_LIMIT;
+
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(15000);
@@ -253,6 +258,18 @@ function submitReservation(f) {
       return { ok: false, message: '선택한 회차는 신청이 마감되었습니다. 다른 회차를 선택하세요.' };
     }
     const rows = readReservations_();
+    const todayCount = rows.filter(function (r) { return String(r[COL.APPLIED - 1]).indexOf(today) === 0; }).length;
+    if (todayCount >= dailyLimit) {
+      return { ok: false, message: '오늘 접수 가능한 신청 건수를 넘었습니다. 내일 다시 신청하거나 학교로 문의하세요.' };
+    }
+    const phoneDigits = phone.replace(/\D/g, ''), emailKey = email.toLowerCase();
+    const dup = rows.some(function (r) {
+      if (r[COL.SESSION - 1] !== sessionId || ACTIVE.indexOf(r[COL.STATUS - 1]) < 0) return false;
+      return r[COL.PHONE - 1].replace(/\D/g, '') === phoneDigits || r[COL.EMAIL - 1].toLowerCase() === emailKey;
+    });
+    if (dup) {
+      return { ok: false, message: '이 회차에 같은 연락처 또는 이메일로 신청한 예약이 있습니다. 예약 조회에서 확인하세요.' };
+    }
     const u = usage_(rows, -1)[sessionId] || { total: 0, byOrg: {} };
     const remaining = session.capacity - u.total;
     if (count > remaining) {
@@ -274,7 +291,6 @@ function submitReservation(f) {
     lock.releaseLock();
   }
 
-  const cfg = getConfig_();
   const label = sessionLabel_(session);
   sendMail_(email, '[태안 AI-DREAM Lab] 투어 예약 신청이 접수되었습니다 (' + no + ')',
     [org + ' ' + name + ' 선생님께', '',
@@ -430,6 +446,7 @@ function onOpen() {
     .addSeparator()
     .addItem('통계 갱신', 'updateStats')
     .addItem('개인정보 파기(기준일 이전 방문분)', 'purgePersonalInfo')
+    .addItem('개인정보 자동 파기 켜기', 'installPurgeTrigger')
     .addToUi();
 }
 
@@ -470,6 +487,7 @@ function setup() {
 
   const has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'handleEdit'; });
   if (!has) ScriptApp.newTrigger('handleEdit').forSpreadsheet(ss_()).onEdit().create();
+  installPurgeTrigger_();
 
   SpreadsheetApp.getUi().alert('초기 설정을 마쳤습니다.\nConfig 시트의 값을 확인한 뒤 오픈 랩 데이를 추가하세요.');
 }
@@ -521,24 +539,77 @@ function updateStatsCore_() {
   return out.length;
 }
 
-/** Config의 파기 기준일 이전 방문분에서 직위·성명·연락처·이메일을 삭제 (기관명·인원은 통계용으로 유지) */
-function purgePersonalInfo() {
-  const ui = SpreadsheetApp.getUi();
-  const cutoff = getConfig_()['파기 기준일'] || '';
-  if (!isDate_(cutoff)) { ui.alert('Config 시트의 파기 기준일을 2027-03-01 형식으로 입력하세요.'); return; }
-  const ok = ui.alert('개인정보 파기', cutoff + ' 이전 방문분의 직위, 성명, 연락처, 이메일을 삭제합니다. 되돌릴 수 없습니다.', ui.ButtonSet.OK_CANCEL);
-  if (ok !== ui.Button.OK) return;
+/** 파기 대상 열: 직위·성명·연락처·이메일·방문 목적·안내 메모·내부 메모 (기관명·기관 유형·인원은 통계용으로 유지) */
+const PURGE_COLS = [COL.TITLE, COL.NAME, COL.PHONE, COL.EMAIL, COL.PURPOSE, COL.NOTE, COL.MEMO];
+
+/** 방문일: OpenDays에서 찾고, 회차 행이 지워졌으면 회차ID(D261021-1)에서 복원 */
+function visitDateOf_(sessionId, dateOf) {
+  if (dateOf[sessionId]) return dateOf[sessionId];
+  const m = /^D(\d{2})(\d{2})(\d{2})-/.exec(String(sessionId || ''));
+  return m ? '20' + m[1] + '-' + m[2] + '-' + m[3] : '';
+}
+
+/** cutoff(yyyy-MM-dd) 이전 방문분의 개인정보를 지우고 건수를 반환. 호출 측에서 스크립트 락을 잡고 있어야 함 */
+function purgeBefore_(cutoff) {
   const dateOf = {};
   readSessions_().forEach(function (s) { dateOf[s.id] = s.date; });
   const sh = ss_().getSheetByName(SHEET.RES);
   let n = 0;
   readReservations_().forEach(function (r, i) {
-    const d = dateOf[r[COL.SESSION - 1]];
-    if (!d || d >= cutoff || !r[COL.NAME - 1]) return;
-    sh.getRange(i + 2, COL.TITLE, 1, 4).clearContent();
+    const d = visitDateOf_(r[COL.SESSION - 1], dateOf);
+    if (!d || d >= cutoff) return;
+    const left = PURGE_COLS.some(function (c) { return r[c - 1] !== ''; });
+    if (!left) return;
+    PURGE_COLS.forEach(function (c) { sh.getRange(i + 2, c).clearContent(); });
     n++;
   });
+  return n;
+}
+
+/** 메뉴: Config의 파기 기준일 이전 방문분을 수동 파기 */
+function purgePersonalInfo() {
+  const ui = SpreadsheetApp.getUi();
+  const cutoff = getConfig_()['파기 기준일'] || '';
+  if (!isDate_(cutoff)) { ui.alert('Config 시트의 파기 기준일을 2027-03-01 형식으로 입력하세요.'); return; }
+  const ok = ui.alert('개인정보 파기', cutoff + ' 이전 방문분의 직위, 성명, 연락처, 이메일, 방문 목적, 메모를 삭제합니다. 되돌릴 수 없습니다.', ui.ButtonSet.OK_CANCEL);
+  if (ok !== ui.Button.OK) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  let n;
+  try { n = purgeBefore_(cutoff); } finally { lock.releaseLock(); }
   ui.alert(n + '건의 개인정보를 파기했습니다.');
+}
+
+/** 자동 파기: 매일 새벽 실행. 지난 학년도(3월 1일 이전) 방문분을 파기하므로 사실상 3월 1일에 처리됨 */
+function autoPurge() {
+  const now = new Date();
+  const y = parseInt(Utilities.formatDate(now, TZ, 'yyyy'), 10);
+  const m = parseInt(Utilities.formatDate(now, TZ, 'M'), 10);
+  const cutoff = (m >= 3 ? y : y - 1) + '-03-01';
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  let n;
+  try { n = purgeBefore_(cutoff); } finally { lock.releaseLock(); }
+  if (n > 0) {
+    sendMail_(getConfig_()['관리자 메일'], '[투어 예약] 개인정보 자동 파기 ' + n + '건',
+      cutoff + ' 이전 방문분 ' + n + '건의 직위, 성명, 연락처, 이메일, 방문 목적, 메모를 삭제했습니다.\n' +
+      '기관명, 기관 유형, 인원은 통계용으로 남겨 두었습니다.\n\n' +
+      '이 시트의 사본이나 내려받은 파일, 메일함의 신청 알림 메일은 따로 삭제해야 합니다.\n' + ss_().getUrl());
+  }
+}
+
+function installPurgeTrigger_() {
+  const has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'autoPurge'; });
+  if (!has) ScriptApp.newTrigger('autoPurge').timeBased().everyDays(1).atHour(3).inTimezone(TZ).create();
+  return !has;
+}
+
+/** 메뉴: 자동 파기 트리거 등록 */
+function installPurgeTrigger() {
+  const added = installPurgeTrigger_();
+  SpreadsheetApp.getUi().alert(added
+    ? '자동 파기를 켰습니다. 매일 새벽 3시 무렵 점검하며, 3월 1일부터 지난 학년도 방문분을 파기합니다.'
+    : '자동 파기가 이미 켜져 있습니다.');
 }
 
 /* ───────── 관리자 페이지 API (admin.html) ─────────
@@ -666,10 +737,23 @@ function adminSetStatus_(no, status, note) {
     const sh = ss_().getSheetByName(SHEET.RES);
     const r = hit.row, rowNo = hit.rowNo;
     if (status === '반려' && !note && !r[COL.NOTE - 1]) return { ok: false, message: '반려 사유를 입력하세요.' };
-    if (note) sh.getRange(rowNo, COL.NOTE).setValue(note);
     if (r[COL.STATUS - 1] === status && (status === '신청' || r[COL.MAILED - 1].indexOf(status + ' 안내') === 0)) {
       return { ok: false, message: '이미 ' + status + ' 상태입니다.' };
     }
+    // 승인 또는 승인 대기로 바꾸기 전에 정원 확인: 이 예약을 뺀 점유 인원 + 이 예약 인원
+    if (ACTIVE.indexOf(status) >= 0) {
+      const s = readSessions_().filter(function (x) { return x.id === r[COL.SESSION - 1]; })[0];
+      if (s) {
+        const others = usage_(readReservations_(), rowNo - 2)[s.id];
+        const taken = others ? others.total : 0;
+        const count = parseInt(r[COL.COUNT - 1], 10) || 0;
+        if (taken + count > s.capacity) {
+          return { ok: false, message: '정원을 넘어 처리하지 않았습니다. (다른 예약 ' + taken + '명 + 이 예약 ' + count +
+            '명 > 정원 ' + s.capacity + '명) 상태는 그대로입니다.' };
+        }
+      }
+    }
+    if (note) sh.getRange(rowNo, COL.NOTE).setValue(note);
     sh.getRange(rowNo, COL.STATUS).setValue(status);
     if (status === '신청') {
       sh.getRange(rowNo, COL.DONE).setValue('');

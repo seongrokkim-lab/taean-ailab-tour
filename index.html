@@ -256,6 +256,7 @@
         <div class="field">
           <label for="lkNo">예약번호</label>
           <input type="text" id="lkNo" maxlength="10" inputmode="numeric" placeholder="예: 2026-001">
+          <span class="sub">숫자만 입력하면 하이픈(-)이 자동으로 들어갑니다.</span>
         </div>
         <div class="field">
           <label for="lkPhone">연락처</label>
@@ -291,7 +292,7 @@
   /* ── 서버 주소: Apps Script 웹앱 배포 URL(…/exec)로 바꾸세요 ── */
   var API_URL = 'https://script.google.com/macros/s/AKfycbwsOEv48HeG84l7BEI_sGoHgoNz1zbrl8msod7Fzqux1-XkOg0Hk-ktqGjCb4QTEYDN/exec';
 
-  var state = { sessions: [], selected: null, place: '' };
+  var state = { sessions: [], selected: null, place: '', lookup: null };
   var $ = function (id) { return document.getElementById(id); };
 
   /* Apps Script는 CORS 사전 요청(OPTIONS)을 처리하지 못하므로
@@ -346,6 +347,12 @@
   }
   formatPhoneInput($('phone'));
   formatPhoneInput($('lkPhone'));
+
+  /* 예약번호 자동 하이픈 (2026-001). 숫자 자판에서도 입력할 수 있게 */
+  $('lkNo').addEventListener('input', function () {
+    var d = this.value.replace(/\D/g, '').slice(0, 9);
+    this.value = d.length > 4 ? d.slice(0, 4) + '-' + d.slice(4) : d;
+  });
 
   /* 탭 */
   function selectTab(name) {
@@ -511,9 +518,11 @@
     if (!/^\d{4}-\d{3,}$/.test(no)) return showMsg(msg, '예약번호는 2026-001 형식입니다.');
     if (!/^\d{3}-\d{4}-\d{4}$/.test(phone)) return showMsg(msg, '연락처는 010-0000-0000 형식으로 입력하세요.');
     btn.disabled = true; msg.hidden = true; $('lookupResult').hidden = true;
+    state.lookup = null;
     api('lookup', { no: no, phone: phone }).then(function (res) {
       btn.disabled = false;
       if (!res || !res.ok) return showMsg(msg, (res && res.message) || '조회하지 못했습니다.');
+      state.lookup = { no: no, phone: phone };
       showLookup(res);
     }).catch(function () {
       btn.disabled = false; showMsg(msg, '연결이 원활하지 않습니다. 잠시 후 다시 시도하세요.');
@@ -527,8 +536,10 @@
   $('cancelBackBtn').addEventListener('click', resetCancelButtons);
   $('cancelConfirmBtn').addEventListener('click', function () {
     var btn = $('cancelConfirmBtn');
+    if (!state.lookup) return;
     btn.disabled = true;
-    api('cancel', { no: $('lkNo').value.trim(), phone: $('lkPhone').value.trim() }).then(function (res) {
+    /* 입력 칸을 고쳤더라도 화면에 조회된 예약을 취소 */
+    api('cancel', state.lookup).then(function (res) {
       btn.disabled = false;
       if (res && res.ok) {
         $('lrStatus').textContent = '취소';
